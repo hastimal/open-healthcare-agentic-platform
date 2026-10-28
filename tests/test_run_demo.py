@@ -102,6 +102,87 @@ class DemoTests(unittest.TestCase):
             self.assertFalse(run_demo.check_ports([port], {("other", "127.0.0.1", 8000)}))
             self.assertFalse(run_demo.check_ports([port], {("api", "127.0.0.2", 8000)}))
 
+    def test_detect_stale_ports_identifies_changed_container_bindings(self) -> None:
+        ports = [
+            run_demo.PublishedPort("api", "0.0.0.0", 8000, 8000),
+            run_demo.PublishedPort("ui", "0.0.0.0", 8501, 8501),
+        ]
+        # Container is publishing port 8001 instead of 8000
+        containers = [
+            {
+                "Service": "api",
+                "Publishers": [{"URL": "0.0.0.0", "PublishedPort": 8001, "Protocol": "tcp"}],
+            },
+            {
+                "Service": "ui",
+                "Publishers": [{"URL": "0.0.0.0", "PublishedPort": 8501, "Protocol": "tcp"}],
+            },
+        ]
+        warnings = run_demo.detect_stale_ports(ports, containers)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Stale binding for api", warnings[0])
+        self.assertIn("8001", warnings[0])
+
+    def test_detect_stale_ports_clean_when_matching(self) -> None:
+        ports = [run_demo.PublishedPort("api", "0.0.0.0", 8000, 8000)]
+        containers = [
+            {
+                "Service": "api",
+                "Publishers": [{"URL": "0.0.0.0", "PublishedPort": 8000, "Protocol": "tcp"}],
+            }
+        ]
+        warnings = run_demo.detect_stale_ports(ports, containers)
+        self.assertEqual(warnings, [])
+
+    def test_detect_missing_ports_identifies_unbound_expected_ports(self) -> None:
+        ports = [
+            run_demo.PublishedPort("api", "0.0.0.0", 8000, 8000),
+            run_demo.PublishedPort("ui", "0.0.0.0", 8501, 8501),
+        ]
+        # api container is running but has no publishers, or different publisher
+        containers = [
+            {"Service": "api", "Publishers": []},
+            {
+                "Service": "ui",
+                "Publishers": [{"URL": "0.0.0.0", "PublishedPort": 8501, "Protocol": "tcp"}],
+            },
+        ]
+        warnings = run_demo.detect_missing_ports(ports, containers)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Missing binding for api", warnings[0])
+        self.assertIn("8000", warnings[0])
+
+    def test_detect_missing_ports_empty_when_no_containers_running(self) -> None:
+        ports = [run_demo.PublishedPort("api", "0.0.0.0", 8000, 8000)]
+        warnings = run_demo.detect_missing_ports(ports, [])
+        self.assertEqual(warnings, [])
+
+    def test_detect_missing_ports_clean_when_all_bound(self) -> None:
+        ports = [run_demo.PublishedPort("api", "0.0.0.0", 8000, 8000)]
+        containers = [
+            {
+                "Service": "api",
+                "Publishers": [{"URL": "0.0.0.0", "PublishedPort": 8000, "Protocol": "tcp"}],
+            }
+        ]
+        warnings = run_demo.detect_missing_ports(ports, containers)
+        self.assertEqual(warnings, [])
+
+    def test_port_conflicts_detection_logs_actionable_advice(self) -> None:
+        ports = [
+            run_demo.PublishedPort("api", "0.0.0.0", 8000, 8000),
+            run_demo.PublishedPort("grafana", "127.0.0.1", 3000, 3000),
+        ]
+        with (
+            patch.object(run_demo, "port_available", side_effect=lambda h, p: p != 8000),
+            patch.object(run_demo, "log") as mock_log,
+        ):
+            available = run_demo.check_ports(ports, set())
+            self.assertFalse(available)
+            logged = [call.args[0] for call in mock_log.call_args_list]
+            self.assertTrue(any("api: port 0.0.0.0:8000 is unavailable" in msg for msg in logged))
+            self.assertTrue(any("API_PORT in .env" in msg for msg in logged))
+
     def test_compose_ps_accepts_array_lines_and_empty_output(self) -> None:
         container = {
             "Service": "api",
