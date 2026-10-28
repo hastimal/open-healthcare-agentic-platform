@@ -31,3 +31,22 @@ tool checks are reported separately, not counted as passing.
 No clinical/retrieval behavior, PHI, credentials or model weights are changed.
 Diagnostics do not print resolved Compose environment values. GitHub CI status
 must be checked on the published PR; local checks do not imply CI has passed.
+
+## Integration Polish Verification
+- `test_run_demo.py`: 25 unit tests passed via `python -m unittest discover -s tests -p "test_run_demo.py" -v` in 0.012s.
+- Regression tests added:
+  - `test_detect_stale_ports_identifies_changed_container_bindings` (verifies detection of stale published ports)
+  - `test_detect_stale_ports_clean_when_matching` (verifies no false positives on clean bindings)
+  - `test_detect_missing_ports_identifies_unbound_expected_ports` (verifies detection when expected ports are missing)
+  - `test_detect_missing_ports_empty_when_no_containers_running` (verifies clean state when no containers exist)
+  - `test_detect_missing_ports_clean_when_all_bound` (verifies matching container publishers)
+  - `test_port_conflicts_detection_logs_actionable_advice` (verifies conflict messaging and .env guidance)
+- Full pytest suite: 238 passed, 15 skipped, 1 warning, 17 subtests passed with 90.11% total coverage (meets >=90.0% threshold).
+- Linters: `ruff check .`, `ruff format --check .`, and `mypy src scripts/run_demo.py tests/test_run_demo.py` passed with 0 errors across 51 source files.
+- Live macOS Docker Compose verification:
+  - Docker daemon (v29.9.2) and Compose plugin (v5.6.1) active.
+  - Successfully built and launched stack (`api`, `ui`, `otel-collector`, `prometheus`, `tempo`, `grafana`).
+  - Readiness verified for FastAPI (`/health` -> HTTP 200), Streamlit UI (`/_stcore/health` -> HTTP 200), Prometheus (`/-/healthy` -> HTTP 200), Tempo (`/ready` -> HTTP 200), and Grafana (`/api/health` -> HTTP 200).
+  - Validated live port override conflict detection: overriding `API_PORT=8006` while container published 8005 accurately triggered both `⚠️ Stale binding for api` and `⚠️ Missing binding for api: Compose config specifies 0.0.0.0:8006`.
+  - Stack cleanly torn down with `docker compose down`.
+

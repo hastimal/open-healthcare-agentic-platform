@@ -87,6 +87,61 @@ def owned_ports(containers: list[dict[str, Any]]) -> set[tuple[str, str, int]]:
     }
 
 
+def _canonical_hosts(host: str) -> set[str]:
+    """Map wildcard addresses so IPv4 and IPv6 dual-stack bindings match."""
+    if host in ("0.0.0.0", "::", ""):
+        return {"0.0.0.0", "::", ""}
+    return {host}
+
+
+def detect_stale_ports(ports: list[PublishedPort], containers: list[dict[str, Any]]) -> list[str]:
+    """Detect running container port bindings that differ from the effective Compose configuration."""
+    expected_by_service: dict[str, set[tuple[str, int]]] = {}
+    for p in ports:
+        for chost in _canonical_hosts(p.host):
+            expected_by_service.setdefault(p.service, set()).add((chost, p.port))
+
+    warnings: list[str] = []
+    for container in containers:
+        service = container.get("Service") or "unknown"
+        expected = expected_by_service.get(service, set())
+        for publisher in container.get("Publishers") or []:
+            if publisher.get("Protocol", "tcp") != "tcp" or not publisher.get("PublishedPort"):
+                continue
+            host = publisher.get("URL", "0.0.0.0")
+            port = int(publisher["PublishedPort"])
+            if (host, port) not in expected:
+                warnings.append(
+                    f"Stale binding for {service}: running container publishes {host}:{port}, "
+                    f"differing from current Compose configuration."
+                )
+    return warnings
+
+
+def detect_missing_ports(ports: list[PublishedPort], containers: list[dict[str, Any]]) -> list[str]:
+    """Detect ports expected by Compose configuration that are missing from running containers."""
+    if not containers:
+        return []
+    running_services = {c.get("Service") for c in containers if c.get("Service")}
+    active_bindings: set[tuple[str, str, int]] = set()
+    for c in containers:
+        for p in c.get("Publishers") or []:
+            if p.get("Protocol", "tcp") == "tcp" and p.get("PublishedPort"):
+                for chost in _canonical_hosts(p.get("URL", "0.0.0.0")):
+                    active_bindings.add((c.get("Service", ""), chost, int(p["PublishedPort"])))
+
+    warnings: list[str] = []
+    for p in ports:
+        if p.service in running_services and not any(
+            (p.service, chost, p.port) in active_bindings for chost in _canonical_hosts(p.host)
+        ):
+            warnings.append(
+                f"Missing binding for {p.service}: Compose config specifies {p.host}:{p.port}, "
+                f"but running container does not publish it."
+            )
+    return warnings
+
+
 def port_available(host: str, port: int) -> bool:
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     try:
@@ -226,7 +281,6 @@ def main() -> int:
         log("❌ Docker Compose v2 is unavailable. Install the Docker Compose plugin.")
         return 1
 
-    # Resolve the same .env, host bindings and project ownership as Compose startup.
     try:
         config = compose_json("config")
         ports = published_ports(config)
@@ -236,10 +290,19 @@ def main() -> int:
         tempo_url = service_url(ports, "tempo", 3200)
         grafana_url = service_url(ports, "grafana", 3000)
         model = config["services"]["api"].get("environment", {}).get("MODEL_NAME", "gemma4:e2b")
-        owned = owned_ports(compose_json("ps"))
+        containers = compose_json("ps")
+        owned = owned_ports(containers)
     except (RuntimeError, KeyError, TypeError, AttributeError, ValueError) as exc:
         log(f"❌ Could not inspect Compose setup: {exc}")
         return 1
+
+    # Check for stale or missing container port bindings relative to effective Compose config
+    stale_warnings = detect_stale_ports(ports, containers)
+    for warning in stale_warnings:
+        log(f"⚠️ {warning}")
+    missing_warnings = detect_missing_ports(ports, containers)
+    for warning in missing_warnings:
+        log(f"⚠️ {warning}")
 
     health_urls = {
         "Streamlit UI": ui_url + "/_stcore/health",

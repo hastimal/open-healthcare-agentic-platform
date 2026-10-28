@@ -29,3 +29,15 @@ distribution metadata. It does not change package or clinical code.
 
 PR #15 is a separate unmerged proposal for the same issue. This implementation
 is based on current main and preserves the original multi-service startup path.
+
+## Stale and Missing Port Detection (Community Integration Polish)
+- Added `detect_stale_ports`: compares running container port bindings reported by
+  `docker compose ps` against the resolved Compose configuration, detecting if
+  containers are publishing outdated bindings or port changes.
+- Added `detect_missing_ports`: checks that running services publish all expected
+  ports specified in the effective Compose configuration, flagging unbound services.
+- Supported wildcard canonicalization (`0.0.0.0`, `::`, `""`) to prevent false
+  stale/missing positives on dual-stack IPv4/IPv6 host systems.
+- Expanded regression tests covering correct port matches, stale bindings, missing
+  bindings, and socket port conflicts.
+
