@@ -22,6 +22,20 @@ def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     )
 
 
+def test_uninstalled_checkout_version_matches_project_metadata() -> None:
+    """A source checkout without installed distributions must report the release version."""
+    import runpy
+    import tomllib
+    from importlib.metadata import PackageNotFoundError
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    metadata = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
+        package = runpy.run_path(str(root / "src" / "healthcare_agents" / "__init__.py"))
+    assert package["__version__"] == metadata["project"]["version"]
+
+
 def test_cli_health_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
     """Verify health subcommand outputs health and configuration info."""
     exit_code = main(["health"])

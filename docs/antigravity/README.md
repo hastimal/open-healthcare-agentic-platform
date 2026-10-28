@@ -30,6 +30,13 @@ This directory maintains the historical documentation, execution records, implem
 
 ## Structure per Milestone
 
+Incremental contributions also record their scope and evidence:
+
+- [Issue 12: demo diagnostics](./issue-12-diagnostics/implementation.md),
+  [requirements](./issue-12-diagnostics/prompt.md),
+  [commands](./issue-12-diagnostics/commands.md) and
+  [verification](./issue-12-diagnostics/verification.md).
+
 Each milestone documentation folder contains:
 1. `prompt.md`: Complete original prompt and requirements.
 2. `commands.md`: Exact commands executed during development and validation.

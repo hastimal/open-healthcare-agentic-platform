@@ -43,6 +43,11 @@ cp .env.example .env
 
 ## 3. Quality Gates & Testing
 
+Before launching containers, run `uv run python scripts/run_demo.py --check-only`.
+See the [developer troubleshooting guide](docs/developer-guide.md) for macOS,
+Ubuntu/Debian and Windows WSL2 setup, port conflicts, Ollama and read-only status
+checks. Existing `--no-browser` usage remains supported.
+
 All contributions must pass strict local quality checks before opening a pull request:
 
 ```bash

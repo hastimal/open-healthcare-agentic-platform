@@ -285,7 +285,8 @@ uv run mypy src tests
 uv run pytest -m "not live" --cov=healthcare_agents --cov-report=term-missing
 ```
 
-*For complete contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/README.md](docs/README.md).*
+*For complete contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md),
+[local demo diagnostics](docs/developer-guide.md) and [docs/README.md](docs/README.md).*
 
 ---
 
